@@ -10,7 +10,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 
 - [x] Milestone 1: Backend scaffold + `/health`
 - [x] Milestone 2: PDF ingestion
-- [ ] Milestone 3: Chunking
+- [x] Milestone 3: Chunking
 - [ ] Milestone 4: Embeddings
 - [ ] Milestone 5: FAISS retrieval
 - [ ] Milestone 6: LCEL RAG chain
@@ -39,6 +39,8 @@ Upload a PDF and get page-aware extraction (page count + per-page char counts; f
 ```bash
 curl -F "file=@data/sample_pdfs/os-concepts-ch5-cpu-scheduling-excerpt.pdf" http://127.0.0.1:8000/api/upload
 ```
+
+The upload response also includes `chunk_count` and per-chunk metadata (`chunk_id`, `page`, `char_count`) — chunking runs automatically on every upload. Tune via `.env`: `CHUNK_TARGET_TOKENS` (default 650) and `CHUNK_OVERLAP_RATIO` (default 0.125). Note: chunks never cross a page boundary (see Milestone 3 notes) and this sample document's pages are all shorter than the default target size, so at defaults you'll see exactly one chunk per page — lower `CHUNK_TARGET_TOKENS` (e.g. to 150) to see a page actually split into multiple overlapping chunks.
 
 ### Sample document
 
