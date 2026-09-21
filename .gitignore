@@ -7,3 +7,10 @@ node_modules/
 data/uploads/
 data/index/
 .DS_Store
+
+# Full source textbooks/reports kept locally for dev/testing only —
+# never committed (copyright, size, confidentiality). Only the small
+# extracted excerpt (see scripts/extract_sample_excerpt.py) is tracked.
+data/sample_pdfs/*
+!data/sample_pdfs/os-concepts-ch5-cpu-scheduling-excerpt.pdf
+!data/sample_pdfs/SOURCE.md

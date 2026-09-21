@@ -9,7 +9,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 ## Current status
 
 - [x] Milestone 1: Backend scaffold + `/health`
-- [ ] Milestone 2: PDF ingestion
+- [x] Milestone 2: PDF ingestion
 - [ ] Milestone 3: Chunking
 - [ ] Milestone 4: Embeddings
 - [ ] Milestone 5: FAISS retrieval
@@ -34,5 +34,14 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Verify: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
+
+Upload a PDF and get page-aware extraction (page count + per-page char counts; full text logged server-side):
+```bash
+curl -F "file=@data/sample_pdfs/os-concepts-ch5-cpu-scheduling-excerpt.pdf" http://127.0.0.1:8000/api/upload
+```
+
+### Sample document
+
+`data/sample_pdfs/os-concepts-ch5-cpu-scheduling-excerpt.pdf` is a 24-page excerpt (see `data/sample_pdfs/SOURCE.md` for exact provenance) used as the realistic test document throughout this project — not lorem-ipsum filler. The full source textbook it's drawn from is kept out of this repo (copyright); regenerate the excerpt yourself via `python scripts/extract_sample_excerpt.py` if you have a copy of the source.
 
 **Note if you're on a corporate network that intercepts TLS** (you'll see `pip install` fail with `CERTIFICATE_VERIFY_FAILED`): point pip at your organization's CA bundle, e.g. `pip install --cert /path/to/corporate-ca-bundle.pem -r requirements.txt`, or set it once via `pip config set global.cert /path/to/bundle.pem`. This is a local machine/network fix, not something the repo can ship — nothing here or in `.gitignore`d files depends on it.
