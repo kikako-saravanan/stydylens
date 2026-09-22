@@ -4,7 +4,7 @@
 
 Students upload course PDFs/slides and ask questions about the material. Answers are grounded in the uploaded documents, with page-level citations, and the assistant explicitly says so when an answer isn't in the material — rather than guessing from general knowledge.
 
-**Status:** all build milestones complete and verified with real output (see [Current status](#current-status)). **Submission format: Option B — GitHub repo only** (see [Deployment](#deployment)), per the submission guidelines' own recommendation for a stack this heavy on local ML dependencies.
+**Status:** all 15 milestones complete. **Submission format: Option B — GitHub repo only** (see [Deployment](#deployment)), per the submission guidelines' own recommendation for a stack this heavy on local ML dependencies. Full item-by-item final acceptance checklist, with real evidence for every line and two honestly-disclosed partial-verification gaps (not rounded up to full PASS), in [`docs/milestones/15-final-acceptance.md`](docs/milestones/15-final-acceptance.md).
 
 **Detailed, self-study notes for every milestone** (problem → first principles → implementation → real verified output → known limitations → self-check Q&A) live in [`docs/milestones/`](docs/milestones/) — start at [`01-repo-health.md`](docs/milestones/01-repo-health.md). This README is the top-level reference; the milestone docs are where the depth lives.
 
@@ -44,7 +44,7 @@ Students upload course PDFs/slides and ask questions about the material. Answers
 - [x] Milestone 12: Tests
 - [x] Milestone 13: Full documentation (this file)
 - [x] Milestone 14: Deployment
-- [ ] Milestone 15: Final acceptance
+- [x] Milestone 15: Final acceptance ([full checklist](docs/milestones/15-final-acceptance.md))
 
 ## Architecture
 
