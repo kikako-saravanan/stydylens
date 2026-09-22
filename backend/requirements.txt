@@ -16,3 +16,5 @@ langchain-google-genai
 # fixes its import (see docs/milestones/09-ragas-evaluation.md).
 langchain-community==0.3.31
 ragas
+pytest
+httpx

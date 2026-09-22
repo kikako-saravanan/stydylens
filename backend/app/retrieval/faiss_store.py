@@ -42,6 +42,16 @@ def _ensure_loaded() -> None:
         _load()
 
 
+def reset() -> None:
+    """Drop in-memory state so the next call reloads from disk (or starts
+    empty). Test-only: lets each test point DATA_DIR/INDEX_PATH/METADATA_PATH
+    at an isolated tmp directory and start from a clean slate, without this
+    module's cached globals leaking state between tests."""
+    global _index, _metadata
+    _index = None
+    _metadata = None
+
+
 def _persist() -> None:
     faiss.write_index(_index, str(INDEX_PATH))
     METADATA_PATH.write_text(json.dumps(_metadata))

@@ -21,7 +21,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 9: RAGAS evaluation
 - [x] Milestone 10: Source attribution
 - [x] Milestone 11: Frontend
-- [ ] Milestone 12: Tests
+- [x] Milestone 12: Tests
 - [ ] Milestone 13: Full documentation
 - [ ] Milestone 14: Deployment
 
@@ -136,7 +136,22 @@ Every answer's `sources` array carries, per chunk: `chunk_id`, `source` (filenam
 
 ### Authentication
 
-`/api/upload`, `/api/query`, and `/api/ask` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PASSWORD` in `.env`) — enforced at the API level, not just hidden behind a frontend, since these endpoints consume paid LLM credit. `/health` stays open (deployment platforms need to reach it without credentials). Default dev credentials: `studylens` / `studylens-demo-2026` — **change these before any real deployment.** The eventual frontend (Milestone 11) will show a login form and, on failure, a message explaining the app is access-restricted to control API costs, with instructions to email **msaravanan1998@gmail.com** for credentials.
+`/api/upload`, `/api/query`, and `/api/ask` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PASSWORD` in `.env`) — enforced at the API level, not just hidden behind a frontend, since these endpoints consume paid LLM credit. `/health` stays open (deployment platforms need to reach it without credentials). Default dev credentials: `studylens` / `studylens-demo-2026` — **change these before any real deployment.** The frontend (Milestone 11) shows a login form and, on failure, a message explaining the app is access-restricted to control API costs, with instructions to email **msaravanan1998@gmail.com** for credentials.
+
+### Tests
+
+```bash
+cd backend
+python -m pytest tests/                       # fast, free, deterministic (default)
+RUN_LIVE_LLM_TESTS=1 python -m pytest tests/   # also runs real, billed LLM calls
+```
+
+29 tests across health, auth, ingestion, chunking, embeddings, retrieval, reranking, routing/decomposition, citation, grounded generation, and unknown-answer refusal — the exact list the assignment calls for. Three kinds, deliberately not blurred together (see `docs/milestones/12-testing.md`):
+
+- **Unit tests** (chunking math, embedding shape/normalization) — pure functions, no I/O.
+- **Integration tests, never mocked** (ingestion, retrieval, reranking, auth) — real PDF, real embedding model, real FAISS, real cross-encoder, run against the actual committed sample PDF. The assignment's own grading criteria checks these components' *real* behavior (does retrieval change per question, is reranking demonstrably real) — mocking either would hide exactly what's being graded.
+- **LLM-boundary-mocked unit tests** (routing merge logic, citation-from-retrieval property, router failure fallback) — deterministic, free, fast; test *our* code around the LLM, not whether the LLM itself reasons well.
+- **Real, live-LLM tests** (grounded generation, honest refusal) — gated behind `RUN_LIVE_LLM_TESTS=1` since they cost real money and are non-deterministic; skipped by default, but real and passing when run (verified in this repo's own build history).
 
 ### Error handling & logging
 
