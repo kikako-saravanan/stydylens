@@ -10,3 +10,9 @@ faiss-cpu
 langchain-core
 langchain-anthropic
 langchain-google-genai
+# Pinned: ragas 0.4.3 imports a deprecated langchain_community shim
+# (chat_models.vertexai) that was removed starting in langchain-community
+# 0.4.0 -- this is the newest version that still has it. Unpin once ragas
+# fixes its import (see docs/milestones/09-ragas-evaluation.md).
+langchain-community==0.3.31
+ragas

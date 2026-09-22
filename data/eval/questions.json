@@ -1,0 +1,58 @@
+[
+  {
+    "question": "What is the objective of multiprogramming in a system with a single CPU core?",
+    "reference_answer": "To have some process running at all times, maximizing CPU utilization, since only one process can run on the CPU at a time and others must wait until it is free."
+  },
+  {
+    "question": "What is the CPU-I/O burst cycle?",
+    "reference_answer": "Process execution consists of a cycle of CPU execution and I/O wait: processes alternate between these two states, with CPU bursts followed by I/O bursts throughout execution."
+  },
+  {
+    "question": "What is the difference between preemptive and nonpreemptive scheduling?",
+    "reference_answer": "In nonpreemptive scheduling, once the CPU is allocated to a process, it keeps the CPU until it releases it by terminating or switching to the waiting state. In preemptive scheduling, a running process can be interrupted and moved back to the ready state so the scheduler can give the CPU to a different process."
+  },
+  {
+    "question": "What is dispatch latency?",
+    "reference_answer": "Dispatch latency is the amount of time it takes for the dispatcher to stop one process and start running another."
+  },
+  {
+    "question": "How does First-Come, First-Served (FCFS) scheduling work?",
+    "reference_answer": "FCFS allocates the CPU to processes in the order they request it, implemented with a FIFO ready queue — the process that arrives first is scheduled first."
+  },
+  {
+    "question": "What is Shortest-Job-First (SJF) scheduling, and what is it optimal for?",
+    "reference_answer": "SJF associates each process with the length of its next CPU burst and schedules the process with the shortest predicted burst next. It is optimal in that it gives the minimum average waiting time for a given set of processes."
+  },
+  {
+    "question": "How does the exponential average formula predict the length of the next CPU burst?",
+    "reference_answer": "Using tau(n+1) = alpha * t(n) + (1 - alpha) * tau(n), where t(n) is the actual length of the most recent CPU burst, tau(n) is the previous prediction, and alpha (between 0 and 1) weights how much recent history matters versus past history."
+  },
+  {
+    "question": "How does round-robin (RR) scheduling work?",
+    "reference_answer": "RR is similar to FCFS but adds preemption: the ready queue is treated as circular, and the CPU scheduler cycles through it, giving each process a time interval called a time quantum (typically 10-100 milliseconds) before preempting it and moving it to the tail of the queue if it hasn't finished."
+  },
+  {
+    "question": "How does the size of the time quantum affect round-robin scheduling's turnaround time?",
+    "reference_answer": "Turnaround time does not simply improve as the quantum grows — it improves when most processes can finish their next CPU burst within a single time quantum. A quantum that is too small causes excessive context switching and overhead, which can worsen turnaround time."
+  },
+  {
+    "question": "What is priority scheduling and what problem can it cause?",
+    "reference_answer": "Priority scheduling assigns a priority to each process and allocates the CPU to the highest-priority process (conventionally the smallest integer). A major problem is indefinite blocking, or starvation, where a low-priority process may wait indefinitely because higher-priority processes keep arriving."
+  },
+  {
+    "question": "What is a multilevel queue scheduling algorithm?",
+    "reference_answer": "It partitions the ready queue into several separate queues based on process type (for example, foreground/interactive processes versus background/batch processes), where each queue can have its own scheduling algorithm, and scheduling also happens between the queues themselves."
+  },
+  {
+    "question": "What is the difference between process-contention scope (PCS) and system-contention scope (SCS) in thread scheduling?",
+    "reference_answer": "PCS decides which user-level thread to schedule onto an available lightweight process, competing only among threads within the same process. SCS is used by the kernel to decide which kernel-level thread to schedule onto a CPU, competing among all threads in the system."
+  },
+  {
+    "question": "What is a deadlock and how can it be prevented?",
+    "reference_answer": "This is not covered in the uploaded material, which focuses on CPU scheduling concepts and algorithms, not deadlocks or deadlock prevention."
+  },
+  {
+    "question": "How do plants convert sunlight into energy through photosynthesis?",
+    "reference_answer": "This is not covered in the uploaded material at all, which is about CPU scheduling in operating systems, not biology."
+  }
+]

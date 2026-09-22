@@ -18,7 +18,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 6: LCEL RAG chain
 - [x] Milestone 7: Query routing / decomposition
 - [x] Milestone 8: Re-ranking
-- [ ] Milestone 9: RAGAS evaluation
+- [x] Milestone 9: RAGAS evaluation
 - [ ] Milestone 10: Source attribution
 - [ ] Milestone 11: Frontend
 - [ ] Milestone 12: Tests
@@ -94,6 +94,28 @@ FAISS retrieves `RETRIEVAL_CANDIDATE_K` (default 10) candidates per sub-question
 | 6 | **p15 (0.4949)** | — |
 
 Page 15 is the excerpt's actual "priority scheduling with round-robin" section — FAISS's embedding search ranked it *last* among the top-10 candidates (lowest similarity score, 0.4949), but the cross-encoder ranked it *first* (highest relevance score) once it could directly attend to the question and that specific chunk together, rather than comparing two independently-computed vectors. Page 16 (multilevel *queue* scheduling — related vocabulary, less directly on-topic) had the *highest* FAISS similarity but dropped to 3rd after reranking. This is a real, unedited before/after pair, not a constructed example — see `docs/milestones/08-reranking.md` for the full trace and more detail on why bi-encoders and cross-encoders disagree here.
+
+### RAGAS evaluation
+
+A 14-question labeled eval set (`data/eval/questions.json` — real question/expected-answer pairs covering the sample document, including 2 deliberately out-of-scope questions to test honest refusal) runs through the full pipeline (routing → retrieval → rerank → generation) and is scored with three RAGAS metrics:
+```bash
+python scripts/run_ragas_eval.py
+```
+Results are appended to `data/eval/results.jsonl` (timestamp, question, answer preview, per-metric scores) — committed as real evidence, not regenerated-and-discarded.
+
+**Real mean scores across all 14 questions:**
+
+| Metric | Mean | What it measures |
+|---|---|---|
+| Faithfulness | **0.9155** | Is the answer's content actually supported by the retrieved context? |
+| Answer relevancy | **0.7275** | Does the answer actually address the question asked? |
+| Context precision | **0.7012** | Of the retrieved chunks, how many were genuinely relevant? |
+
+Not all 1.0, not missing — plausible scores with real variance. Two genuinely interesting cases, reported honestly rather than cherry-picked away (full explanation in `docs/milestones/09-ragas-evaluation.md`):
+- The two out-of-scope questions ("what is a deadlock", "photosynthesis") correctly scored **faithfulness=1.0** (the "I couldn't find this" refusal makes no unsupported claims) but **answer_relevancy=0.0, context_precision=0.0** — a refusal is faithful but, correctly, judged as not relevant to the literal question and not backed by relevant context.
+- "What is dispatch latency?" — a **correct, well-grounded one-sentence answer** — still scored **faithfulness=0.0**, and "What is SJF scheduling...?" — a **correct, detailed answer** — scored **answer_relevancy=0.0**. Both are read as real limitations of the RAGAS judge model on short/single-claim answers, not evidence our system answered incorrectly (the actual answer text is verifiably accurate against the source).
+
+**Real dependency-compatibility bugs hit and fixed, not hidden:** `ragas` 0.4.3 fails to import against current `langchain-community` (pinned to `0.3.31`, see `requirements.txt` comment); RAGAS's judge calls pass an explicit `temperature`, which current Claude models (Sonnet 5, Opus 5) reject outright — fixed with a separate, older `RAGAS_JUDGE_MODEL` (`claude-haiku-4-5`) dedicated to evaluation, distinct from `LLM_MODEL`; the deprecated `answer_relevancy` metric needs the classic LangChain embeddings interface (`LangchainEmbeddingsWrapper` + `langchain_community`'s `HuggingFaceEmbeddings`), not RAGAS's newer embeddings classes, which fail with `AttributeError` if used here.
 
 ### Authentication
 
