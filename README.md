@@ -17,6 +17,7 @@ Students upload course PDFs/slides and ask questions about the material. Answers
 - [Setup](#setup)
 - [Environment variables](#environment-variables)
 - [API reference](#api-reference)
+- [Pipeline visualization](#pipeline-visualization)
 - [Pipeline stages](#pipeline-stages)
 - [RAGAS evaluation](#ragas-evaluation)
 - [Re-ranking (before/after evidence)](#re-ranking-beforeafter-evidence)
@@ -114,7 +115,7 @@ All of the above is served by a FastAPI backend behind HTTP Basic Auth (Mileston
 | Fallback LLM | Gemini 2.5 Flash (`langchain-google-genai`) | Free tier, automatic failover on any classified provider error |
 | Evaluation | RAGAS 0.4.3 | faithfulness / answer_relevancy / context_precision, judged by a dedicated `claude-haiku-4-5` |
 | Auth | HTTP Basic (`secrets.compare_digest`) | Timing-safe, enforced server-side, not just a frontend gate |
-| Testing | pytest | 29 tests — unit, integration (never mocking retrieval/reranking), and gated live-LLM tests |
+| Testing | pytest | 33 tests — unit, integration (never mocking retrieval/reranking), and gated live-LLM tests |
 | Frontend | Next.js (App Router) + TypeScript + Tailwind | Login gate, upload, ask, expandable source citations |
 
 ## Repository structure
@@ -209,6 +210,7 @@ All endpoints except `/health` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PA
 | `POST /api/upload` | required | multipart `file` (PDF) | `{filename, page_count, pages[], chunk_count, chunks[], index_total_chunks}` | Full ingest→chunk→embed→index pipeline |
 | `POST /api/query` | required | `{"question": str, "k": int}` | `{question, results: [{chunk_id, source, page, score, snippet}]}` | Raw FAISS retrieval, no LLM, no reranking |
 | `POST /api/ask` | required | `{"question": str, "k": int\|null}` | see below | Full pipeline: route → retrieve → rerank → generate |
+| `POST /api/ask/stream` | required | same as `/api/ask` | Server-Sent Events, one event per stage | Same pipeline, streamed live — see [Pipeline visualization](#pipeline-visualization) |
 
 `POST /api/ask` response shape:
 ```json
@@ -226,6 +228,10 @@ All endpoints except `/health` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PA
 }
 ```
 Returns `503 {"error": "..."}` if both LLM providers fail; `400` for a non-PDF or unparseable upload; `401` for missing/invalid credentials.
+
+## Pipeline visualization
+
+Beyond the 15 required milestones: a "Show pipeline stages" checkbox in the frontend's ask panel switches to `POST /api/ask/stream` (Server-Sent Events) instead of the plain `/api/ask`, so you can *watch* routing → retrieval → reranking → generation happen live, each with its real data (query type, sub-questions, candidate count, whether reranking changed the top result), rather than only reading a finished JSON response. The streaming path reuses the exact same stage functions the LCEL chain calls — a different orchestration of identical building blocks, not a second implementation — and a dedicated test (`test_stream_answer_question_final_event_matches_batch_answer`) asserts the two paths produce identical answers for the same question, so they can't silently drift apart. Full design writeup in [docs/milestones/16-pipeline-visualization.md](docs/milestones/16-pipeline-visualization.md).
 
 ## Pipeline stages
 
@@ -297,7 +303,7 @@ python -m pytest tests/                       # fast, free, deterministic (defau
 RUN_LIVE_LLM_TESTS=1 python -m pytest tests/   # also runs real, billed LLM calls
 ```
 
-29 tests: health, auth, ingestion, chunking, embeddings, retrieval, reranking, routing/decomposition, citation, grounded generation, and unknown-answer refusal. Real output: `27 passed, 2 skipped in 68s` (default), `5 passed in 61s` with live LLM tests enabled. Retrieval and reranking are **never mocked** — real PDF, real embedding model, real FAISS, real cross-encoder — since those are exactly the components the assignment's grading criteria wants proven real. The LLM boundary is mocked only in the 3 tests specifically checking *our* merge/citation/fallback logic, not the LLM's own reasoning quality (that's covered separately by the two live-gated tests and by RAGAS). Full rationale in [docs/milestones/12-testing.md](docs/milestones/12-testing.md).
+33 tests: health, auth, ingestion, chunking, embeddings, retrieval, reranking, routing/decomposition, citation, grounded generation, unknown-answer refusal, and the pipeline-visualization streaming endpoint. Real output: `31 passed, 2 skipped in 32s` (default), plus 2 gated live-LLM tests. Retrieval and reranking are **never mocked** — real PDF, real embedding model, real FAISS, real cross-encoder — since those are exactly the components the assignment's grading criteria wants proven real. The LLM boundary is mocked only in the 3 tests specifically checking *our* merge/citation/fallback logic, not the LLM's own reasoning quality (that's covered separately by the two live-gated tests and by RAGAS). Full rationale in [docs/milestones/12-testing.md](docs/milestones/12-testing.md).
 
 ## Deployment
 

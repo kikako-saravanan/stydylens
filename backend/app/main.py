@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import shutil
@@ -7,14 +8,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.auth import require_auth
 from app.chunking.chunker import chunk_pages
 from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
-from app.rag.chain import answer_question, make_snippet
+from app.rag.chain import answer_question, make_snippet, stream_answer_question
 from app.rag.llm_provider import AllProvidersUnavailableError
 from app.rerank.reranker import get_reranker
 from app.retrieval.faiss_store import add_chunks, query_index
@@ -168,3 +169,28 @@ async def ask(request: AskRequest, _user: str = Depends(require_auth)):
     )
 
     return result
+
+
+@app.post("/api/ask/stream")
+async def ask_stream(request: AskRequest, _user: str = Depends(require_auth)):
+    """Server-Sent Events version of /api/ask, for the frontend's pipeline
+    visualization panel — emits a real event as each stage (routing,
+    retrieval, reranking, generation) actually starts and finishes, using
+    the identical pipeline stream_answer_question() orchestrates.
+    """
+
+    def event_stream():
+        try:
+            for event in stream_answer_question(request.question, request.k):
+                yield f"data: {json.dumps(event)}\n\n"
+        except AllProvidersUnavailableError as e:
+            # The HTTP response already started streaming with a 200 status
+            # by this point -- we can't change it to a 503 mid-stream, so
+            # the error has to be reported as an event instead.
+            logger.error("All LLM providers unavailable during stream: %s", e)
+            yield f"data: {json.dumps({'stage': 'error', 'message': str(e)})}\n\n"
+        except Exception:
+            logger.exception("Unhandled error during /api/ask/stream")
+            yield f"data: {json.dumps({'stage': 'error', 'message': 'Internal server error.'})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

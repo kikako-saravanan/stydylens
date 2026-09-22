@@ -114,3 +114,72 @@ export async function askQuestion(question: string, creds: Credentials): Promise
     creds
   );
 }
+
+export type PipelineStage = "routing" | "retrieval" | "reranking" | "generation";
+
+export interface PipelineEvent {
+  stage: PipelineStage | "complete" | "error";
+  status?: "start" | "done";
+  // routing
+  query_type?: AskResult["query_type"];
+  sub_questions?: string[];
+  // retrieval
+  retrieval_trace?: AskResult["retrieval_trace"];
+  candidate_count?: number;
+  // reranking
+  pre_rerank_order?: string[];
+  post_rerank_order?: string[];
+  // generation / complete
+  answer?: string;
+  sources?: Source[];
+  question?: string;
+  // error
+  message?: string;
+}
+
+/**
+ * Consumes the SSE pipeline-visualization endpoint. Not the native
+ * browser EventSource API: EventSource can only do unauthenticated GET
+ * requests, and this needs a POST body plus a Basic Auth header. Instead,
+ * fetch() the stream manually and parse the same "data: {json}\n\n"
+ * framing by hand — a standard workaround for authenticated/POST SSE.
+ */
+export async function* streamAsk(
+  question: string,
+  creds: Credentials
+): AsyncGenerator<PipelineEvent> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/api/ask/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authHeader(creds) },
+      body: JSON.stringify({ question }),
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the StudyLens server. Is the backend running?");
+  }
+
+  if (!response.ok || !response.body) {
+    throw new ApiError(response.status, `Failed to start the pipeline stream (${response.status}).`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? ""; // last piece may be incomplete, keep it for next chunk
+
+    for (const raw of events) {
+      const line = raw.trim();
+      if (line.startsWith("data: ")) {
+        yield JSON.parse(line.slice("data: ".length)) as PipelineEvent;
+      }
+    }
+  }
+}

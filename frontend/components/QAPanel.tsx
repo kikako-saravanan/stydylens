@@ -1,8 +1,16 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { ApiError, AskResult, Credentials, askQuestion } from "@/lib/api";
+import {
+  ApiError,
+  AskResult,
+  Credentials,
+  PipelineEvent,
+  askQuestion,
+  streamAsk,
+} from "@/lib/api";
 import { SourcesList } from "./SourcesList";
+import { PipelinePanel } from "./PipelinePanel";
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -17,16 +25,54 @@ export function QAPanel({ creds, hasDocument }: { creds: Credentials; hasDocumen
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<AskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPipeline, setShowPipeline] = useState(false);
+  const [pipelineEvents, setPipelineEvents] = useState<PipelineEvent[]>([]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!question.trim()) return;
     setStatus("loading");
     setError(null);
+    setResult(null);
+    setPipelineEvents([]);
+
+    if (!showPipeline) {
+      try {
+        const res = await askQuestion(question, creds);
+        setResult(res);
+        setStatus("success");
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Something went wrong asking that question.");
+        setStatus("error");
+      }
+      return;
+    }
+
+    // Pipeline mode: consume the SSE stream, updating the visualization
+    // live as each real stage event arrives, rather than waiting for one
+    // final response.
     try {
-      const res = await askQuestion(question, creds);
-      setResult(res);
-      setStatus("success");
+      for await (const event of streamAsk(question, creds)) {
+        if (event.stage === "error") {
+          setError(event.message ?? "Something went wrong asking that question.");
+          setStatus("error");
+          return;
+        }
+        setPipelineEvents((prev) => [...prev, event]);
+        if (event.stage === "complete") {
+          setResult({
+            question: event.question ?? question,
+            answer: event.answer ?? "",
+            query_type: event.query_type ?? "single_fact",
+            sub_questions: event.sub_questions ?? [],
+            retrieval_trace: event.retrieval_trace ?? [],
+            pre_rerank_order: event.pre_rerank_order ?? [],
+            post_rerank_order: event.post_rerank_order ?? [],
+            sources: event.sources ?? [],
+          });
+          setStatus("success");
+        }
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong asking that question.");
       setStatus("error");
@@ -35,7 +81,18 @@ export function QAPanel({ creds, hasDocument }: { creds: Credentials; hasDocumen
 
   return (
     <section className="rounded-xl border border-black/10 p-5">
-      <h2 className="text-sm font-semibold text-gray-700">2. Ask a question</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-gray-700">2. Ask a question</h2>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500">
+          <input
+            type="checkbox"
+            checked={showPipeline}
+            onChange={(e) => setShowPipeline(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          Show pipeline stages
+        </label>
+      </div>
 
       <form onSubmit={handleSubmit} className="mt-3 flex gap-2">
         <input
@@ -60,6 +117,7 @@ export function QAPanel({ creds, hasDocument }: { creds: Credentials; hasDocumen
       {status === "idle" && (
         <p className="mt-3 text-xs text-gray-400">
           Ask something the uploaded lecture covers, or something outside it — StudyLens will say so honestly if it can&apos;t find an answer.
+          {" "}Check &quot;Show pipeline stages&quot; to watch routing → retrieval → reranking → generation happen live.
         </p>
       )}
 
@@ -67,6 +125,10 @@ export function QAPanel({ creds, hasDocument }: { creds: Credentials; hasDocumen
         <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
+      )}
+
+      {showPipeline && (status === "loading" || pipelineEvents.length > 0) && (
+        <PipelinePanel events={pipelineEvents} />
       )}
 
       {status === "success" && result && (
