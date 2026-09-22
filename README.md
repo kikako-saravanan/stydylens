@@ -15,7 +15,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 3: Chunking
 - [x] Milestone 4: Embeddings
 - [x] Milestone 5: FAISS retrieval
-- [ ] Milestone 6: LCEL RAG chain
+- [x] Milestone 6: LCEL RAG chain
 - [ ] Milestone 7: Query routing / decomposition
 - [ ] Milestone 8: Re-ranking
 - [ ] Milestone 9: RAGAS evaluation
@@ -58,6 +58,24 @@ curl -X POST http://127.0.0.1:8000/api/query -H "Content-Type: application/json"
 Returns ranked results (`chunk_id`, `source`, `page`, `score`, `snippet`). The index survives server restarts (persisted to `data/index/`, gitignored — regenerate by re-uploading).
 
 **Known limitation:** no deduplication — re-uploading the same file adds a second copy of all its chunks to the index rather than replacing the first. Fine for this project's scope (single upload per document in the demo flow); a real product would need a "replace existing chunks for this filename" step before adding.
+
+### Ask a grounded question (full LCEL chain: retrieve → augment → generate)
+
+```bash
+curl -u studylens:studylens-demo-2026 -X POST http://127.0.0.1:8000/api/ask -H "Content-Type: application/json" \
+  -d '{"question": "What is round robin scheduling and how does the time quantum affect it?"}'
+```
+Returns `{"question", "answer", "sources"}` — `sources` are the exact chunks retrieved and fed to the LLM (not something parsed out of its reply), so every citation is independently verifiable. Ask something plausible but genuinely outside the uploaded material (e.g. "What is a deadlock and how can it be prevented?" — not covered by the CPU-scheduling excerpt) and the assistant explicitly says it couldn't find that in the uploaded material, rather than answering from general knowledge.
+
+**LLM provider + fallback:** primary is Claude (`ANTHROPIC_API_KEY`/`LLM_MODEL`, default `claude-sonnet-5`). If Anthropic fails for any reason (credit exhausted, rate limited, timed out — any `langchain_core.exceptions.ModelError`), it automatically falls back to Gemini (`GOOGLE_API_KEY`/`LLM_FALLBACK_MODEL`, free tier at [aistudio.google.com](https://aistudio.google.com/apikey)). If both providers fail, `/api/ask` returns a clean `503` with a helpful message instead of a raw stack trace.
+
+### Authentication
+
+`/api/upload`, `/api/query`, and `/api/ask` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PASSWORD` in `.env`) — enforced at the API level, not just hidden behind a frontend, since these endpoints consume paid LLM credit. `/health` stays open (deployment platforms need to reach it without credentials). Default dev credentials: `studylens` / `studylens-demo-2026` — **change these before any real deployment.** The eventual frontend (Milestone 11) will show a login form and, on failure, a message explaining the app is access-restricted to control API costs, with instructions to email **msaravanan1998@gmail.com** for credentials.
+
+### Error handling & logging
+
+Replaced ad-hoc `print()` with Python's `logging` module (`LOG_LEVEL` in `.env`); a global FastAPI exception handler logs full tracebacks server-side but returns clean, generic JSON errors to clients (never a raw stack trace); malformed uploads (non-PDF, corrupt file) return a `400` with a clear message instead of crashing.
 
 **Note on this environment:** if `sentence-transformers` model downloads fail with a `Policy: URL Filtering` error, your network's security proxy is blocking Hugging Face's CDN. Try setting `REQUESTS_CA_BUNDLE`/`SSL_CERT_FILE` to your corporate CA bundle and `HF_HUB_DISABLE_XET=1`. Once downloaded, the model is cached in `~/.cache/huggingface` and no further network access is needed (set `HF_HUB_OFFLINE=1` to skip even the startup metadata check).
 

@@ -7,3 +7,6 @@ pdfplumber
 pypdf
 sentence-transformers
 faiss-cpu
+langchain-core
+langchain-anthropic
+langchain-google-genai

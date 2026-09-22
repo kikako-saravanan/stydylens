@@ -1,19 +1,30 @@
+import logging
 import os
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.auth import require_auth
 from app.chunking.chunker import chunk_pages
 from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
+from app.rag.chain import answer_question
+from app.rag.llm_provider import AllProvidersUnavailableError
 from app.retrieval.faiss_store import add_chunks, query_index
 
 load_dotenv()
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("studylens")
 
 
 @asynccontextmanager
@@ -40,34 +51,59 @@ UPLOAD_DIR = BACKEND_DIR.parent / "data" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+@app.exception_handler(AllProvidersUnavailableError)
+async def all_providers_unavailable_handler(request, exc: AllProvidersUnavailableError):
+    logger.error("All LLM providers unavailable: %s", exc)
+    return JSONResponse(status_code=503, content={"error": str(exc)})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    # Never leak a raw traceback to a client — log the full detail
+    # server-side (exc_info gives us the real stack trace in the logs)
+    # and return a generic, safe message to whoever called the API.
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error. Check server logs for details."},
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
 
 @app.post("/api/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(file: UploadFile = File(...), _user: str = Depends(require_auth)):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
     dest = UPLOAD_DIR / file.filename
     with dest.open("wb") as out:
         shutil.copyfileobj(file.file, out)
 
-    pages = extract_pages(dest, source=file.filename)
+    try:
+        pages = extract_pages(dest, source=file.filename)
+    except Exception as e:
+        logger.warning("Failed to parse %s as a PDF: %s", file.filename, e)
+        raise HTTPException(
+            status_code=400, detail=f"Could not read '{file.filename}' as a PDF."
+        ) from e
 
-    print(f"[ingestion] {file.filename}: {len(pages)} pages with extractable text")
+    logger.info("[ingestion] %s: %d pages with extractable text", file.filename, len(pages))
     for p in pages:
         preview = p.text[:80].replace("\n", " ")
-        print(f"  page {p.page}: {len(p.text)} chars — {preview!r}")
+        logger.debug("  page %d: %d chars — %r", p.page, len(p.text), preview)
 
     chunks = chunk_pages(pages)
-    print(f"[chunking] {file.filename}: {len(chunks)} chunks from {len(pages)} pages")
-    for c in chunks:
-        preview = c.text[:80].replace("\n", " ")
-        print(f"  {c.chunk_id}: {len(c.text)} chars — {preview!r}")
+    logger.info("[chunking] %s: %d chunks from %d pages", file.filename, len(chunks), len(pages))
 
     total_indexed = add_chunks(chunks)
-    print(
-        f"[index] {file.filename}: {len(chunks)} chunks embedded and added to FAISS "
-        f"(index now holds {total_indexed} chunks total across all uploads)"
+    logger.info(
+        "[index] %s: %d chunks embedded and added to FAISS "
+        "(index now holds %d chunks total across all uploads)",
+        file.filename, len(chunks), total_indexed,
     )
 
     return {
@@ -89,12 +125,9 @@ class QueryRequest(BaseModel):
 
 
 @app.post("/api/query")
-async def query(request: QueryRequest):
+async def query(request: QueryRequest, _user: str = Depends(require_auth)):
     results = query_index(request.question, request.k)
-    print(f"[query] {request.question!r} -> {len(results)} results")
-    for r in results:
-        preview = r["text"][:80].replace("\n", " ")
-        print(f"  score={r['score']:.4f} {r['source']} p{r['page']} — {preview!r}")
+    logger.info("[query] %r -> %d results", request.question, len(results))
 
     return {
         "question": request.question,
@@ -109,3 +142,19 @@ async def query(request: QueryRequest):
             for r in results
         ],
     }
+
+
+class AskRequest(BaseModel):
+    question: str
+    k: int | None = None
+
+
+@app.post("/api/ask")
+async def ask(request: AskRequest, _user: str = Depends(require_auth)):
+    result = answer_question(request.question, request.k)
+    logger.info(
+        "[ask] %r -> grounded in %d source chunk(s)",
+        request.question, len(result["sources"]),
+    )
+
+    return result
