@@ -20,12 +20,12 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 8: Re-ranking
 - [x] Milestone 9: RAGAS evaluation
 - [x] Milestone 10: Source attribution
-- [ ] Milestone 11: Frontend
+- [x] Milestone 11: Frontend
 - [ ] Milestone 12: Tests
 - [ ] Milestone 13: Full documentation
 - [ ] Milestone 14: Deployment
 
-## Setup (backend, so far)
+## Setup (backend)
 
 ```bash
 cd backend
@@ -36,6 +36,17 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 Verify: `curl http://127.0.0.1:8000/health` → `{"status":"ok"}`
+
+## Setup (frontend)
+
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_URL, defaults to http://127.0.0.1:8000
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). Sign in with the `AUTH_USERNAME`/`AUTH_PASSWORD` from the backend's `.env` (defaults `studylens` / `studylens-demo-2026`), upload the sample PDF, ask a question. See `frontend/README.md` for the component breakdown and a real limitation: this UI's actual click-through behavior could not be visually tested in the environment it was built in (no connected browser automation tool) — it was verified as far as possible by direct HTTP testing of every API call the frontend makes (correct CORS headers, response shapes matching the TypeScript client) against the real backend, and by a clean `npm run build`, but an actual click-through in a real browser is a real gap worth doing before trusting this fully.
 
 Upload a PDF and get page-aware extraction (page count + per-page char counts; full text logged server-side):
 ```bash

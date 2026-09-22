@@ -76,6 +76,14 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/me")
+def me(user: str = Depends(require_auth)):
+    """Cheap, auth-only endpoint the frontend's login screen calls to
+    validate credentials -- no PDF parsing, no embeddings, no LLM calls,
+    so checking a login attempt costs nothing beyond the auth check itself."""
+    return {"username": user}
+
+
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...), _user: str = Depends(require_auth)):
     if not file.filename.lower().endswith(".pdf"):
