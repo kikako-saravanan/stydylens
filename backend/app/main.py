@@ -14,7 +14,7 @@ from app.auth import require_auth
 from app.chunking.chunker import chunk_pages
 from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
-from app.rag.chain import answer_question
+from app.rag.chain import answer_question, make_snippet
 from app.rag.llm_provider import AllProvidersUnavailableError
 from app.rerank.reranker import get_reranker
 from app.retrieval.faiss_store import add_chunks, query_index
@@ -139,7 +139,7 @@ async def query(request: QueryRequest, _user: str = Depends(require_auth)):
                 "source": r["source"],
                 "page": r["page"],
                 "score": r["score"],
-                "snippet": r["text"][:200],
+                "snippet": make_snippet(r["text"]),
             }
             for r in results
         ],

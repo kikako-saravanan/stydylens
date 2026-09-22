@@ -31,6 +31,19 @@ PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
+def make_snippet(text: str, max_len: int = 200) -> str:
+    """Truncate at a word boundary, not mid-word, so a citation snippet
+    reads as a real fragment a reviewer can match against the source page
+    rather than a string arbitrarily cut off partway through a word."""
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_space = truncated.rfind(" ")
+    if last_space > max_len * 0.6:
+        truncated = truncated[:last_space]
+    return truncated.rstrip() + "…"
+
+
 def format_context(chunks: list[dict]) -> str:
     if not chunks:
         return "(no relevant material found in the uploaded documents)"
@@ -144,7 +157,7 @@ def answer_question(question: str, k: int | None = None) -> dict:
                 "page": c["page"],
                 "faiss_score": c["score"],
                 "rerank_score": c["rerank_score"],
-                "snippet": c["text"][:200],
+                "snippet": make_snippet(c["text"]),
             }
             for c in reranked_chunks
         ],
