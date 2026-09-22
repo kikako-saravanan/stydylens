@@ -16,7 +16,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 4: Embeddings
 - [x] Milestone 5: FAISS retrieval
 - [x] Milestone 6: LCEL RAG chain
-- [ ] Milestone 7: Query routing / decomposition
+- [x] Milestone 7: Query routing / decomposition
 - [ ] Milestone 8: Re-ranking
 - [ ] Milestone 9: RAGAS evaluation
 - [ ] Milestone 10: Source attribution
@@ -68,6 +68,15 @@ curl -u studylens:studylens-demo-2026 -X POST http://127.0.0.1:8000/api/ask -H "
 Returns `{"question", "answer", "sources"}` — `sources` are the exact chunks retrieved and fed to the LLM (not something parsed out of its reply), so every citation is independently verifiable. Ask something plausible but genuinely outside the uploaded material (e.g. "What is a deadlock and how can it be prevented?" — not covered by the CPU-scheduling excerpt) and the assistant explicitly says it couldn't find that in the uploaded material, rather than answering from general knowledge.
 
 **LLM provider + fallback:** primary is Claude (`ANTHROPIC_API_KEY`/`LLM_MODEL`, default `claude-sonnet-5`). If Anthropic fails for any reason (credit exhausted, rate limited, timed out — any `langchain_core.exceptions.ModelError`), it automatically falls back to Gemini (`GOOGLE_API_KEY`/`LLM_FALLBACK_MODEL`, free tier at [aistudio.google.com](https://aistudio.google.com/apikey)). If both providers fail, `/api/ask` returns a clean `503` with a helpful message instead of a raw stack trace.
+
+### Query routing & decomposition
+
+Every question is classified before retrieval into `single_fact`, `multi_part`, or `summarization` (a structured-output LLM call — see `docs/milestones/07-query-routing-decomposition.md`). `multi_part` and `summarization` decompose into several sub-questions, each retrieved independently, then merged (deduplicated by chunk id) before generation — so a question like *"What is X and how does it compare to Y?"* gets dedicated retrieval for both X and Y instead of one side dominating a single combined-embedding search. The response now includes `query_type`, `sub_questions`, and `retrieval_trace` (which chunks came from which sub-question) alongside the usual `answer`/`sources`:
+```bash
+curl -u studylens:studylens-demo-2026 -X POST http://127.0.0.1:8000/api/ask -H "Content-Type: application/json" \
+  -d '{"question": "What is round robin scheduling and how does it compare to first-come-first-served scheduling?"}'
+```
+If routing itself fails for any reason, it degrades to treating the question as `single_fact` (the Milestone 6 behavior) rather than failing the whole request.
 
 ### Authentication
 
