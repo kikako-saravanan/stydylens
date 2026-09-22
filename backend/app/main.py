@@ -6,10 +6,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from app.chunking.chunker import chunk_pages
-from app.embeddings.embedder import embed_texts, get_model
+from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
+from app.retrieval.faiss_store import add_chunks, query_index
 
 load_dotenv()
 
@@ -62,11 +64,10 @@ async def upload_pdf(file: UploadFile = File(...)):
         preview = c.text[:80].replace("\n", " ")
         print(f"  {c.chunk_id}: {len(c.text)} chars — {preview!r}")
 
-    embeddings = embed_texts([c.text for c in chunks]) if chunks else None
-    embedding_dim = int(embeddings.shape[1]) if embeddings is not None else 0
+    total_indexed = add_chunks(chunks)
     print(
-        f"[embeddings] {file.filename}: {len(chunks)} chunks embedded, "
-        f"dim={embedding_dim}, model={os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')}"
+        f"[index] {file.filename}: {len(chunks)} chunks embedded and added to FAISS "
+        f"(index now holds {total_indexed} chunks total across all uploads)"
     )
 
     return {
@@ -78,5 +79,33 @@ async def upload_pdf(file: UploadFile = File(...)):
             {"chunk_id": c.chunk_id, "page": c.page, "char_count": len(c.text)}
             for c in chunks
         ],
-        "embedding_dim": embedding_dim,
+        "index_total_chunks": total_indexed,
+    }
+
+
+class QueryRequest(BaseModel):
+    question: str
+    k: int = 5
+
+
+@app.post("/api/query")
+async def query(request: QueryRequest):
+    results = query_index(request.question, request.k)
+    print(f"[query] {request.question!r} -> {len(results)} results")
+    for r in results:
+        preview = r["text"][:80].replace("\n", " ")
+        print(f"  score={r['score']:.4f} {r['source']} p{r['page']} — {preview!r}")
+
+    return {
+        "question": request.question,
+        "results": [
+            {
+                "chunk_id": r["chunk_id"],
+                "source": r["source"],
+                "page": r["page"],
+                "score": r["score"],
+                "snippet": r["text"][:200],
+            }
+            for r in results
+        ],
     }
