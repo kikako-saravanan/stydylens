@@ -16,6 +16,7 @@ from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
 from app.rag.chain import answer_question
 from app.rag.llm_provider import AllProvidersUnavailableError
+from app.rerank.reranker import get_reranker
 from app.retrieval.faiss_store import add_chunks, query_index
 
 load_dotenv()
@@ -29,10 +30,11 @@ logger = logging.getLogger("studylens")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load the embedding model once at startup, not on the first request —
-    # otherwise whichever user's upload happens to be first pays a multi-
-    # second model-load penalty that has nothing to do with their PDF.
+    # Load models once at startup, not on the first request — otherwise
+    # whichever request happens to be first pays a multi-second model-load
+    # penalty that has nothing to do with what it actually asked for.
     get_model()
+    get_reranker()
     yield
 
 

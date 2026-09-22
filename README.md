@@ -17,7 +17,7 @@ Architecture, tech stack, API reference, and evaluation results will be filled i
 - [x] Milestone 5: FAISS retrieval
 - [x] Milestone 6: LCEL RAG chain
 - [x] Milestone 7: Query routing / decomposition
-- [ ] Milestone 8: Re-ranking
+- [x] Milestone 8: Re-ranking
 - [ ] Milestone 9: RAGAS evaluation
 - [ ] Milestone 10: Source attribution
 - [ ] Milestone 11: Frontend
@@ -77,6 +77,23 @@ curl -u studylens:studylens-demo-2026 -X POST http://127.0.0.1:8000/api/ask -H "
   -d '{"question": "What is round robin scheduling and how does it compare to first-come-first-served scheduling?"}'
 ```
 If routing itself fails for any reason, it degrades to treating the question as `single_fact` (the Milestone 6 behavior) rather than failing the whole request.
+
+### Re-ranking (before/after evidence)
+
+FAISS retrieves `RETRIEVAL_CANDIDATE_K` (default 10) candidates per sub-question — deliberately more than what reaches the LLM — and a cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`) re-scores all merged candidates against the *original* question, keeping only `RERANK_TOP_K` (default 5). `/api/ask`'s response includes `pre_rerank_order` and `post_rerank_order` (chunk id lists) plus per-source `faiss_score` and `rerank_score`, so the effect is directly inspectable, not just claimed.
+
+**Real example** — `"How does priority scheduling work?"`:
+
+| Rank | Pre-rerank (FAISS) | Post-rerank (cross-encoder) |
+|---|---|---|
+| 1 | p16 (0.6236) | **p15** (rerank 3.97) — *was ranked #6 by FAISS* |
+| 2 | p13 | p14 (rerank 2.40) |
+| 3 | p19 | p16 (rerank 1.34) — *dropped from #1* |
+| 4 | p14 | p19 |
+| 5 | p10 | p18 |
+| 6 | **p15 (0.4949)** | — |
+
+Page 15 is the excerpt's actual "priority scheduling with round-robin" section — FAISS's embedding search ranked it *last* among the top-10 candidates (lowest similarity score, 0.4949), but the cross-encoder ranked it *first* (highest relevance score) once it could directly attend to the question and that specific chunk together, rather than comparing two independently-computed vectors. Page 16 (multilevel *queue* scheduling — related vocabulary, less directly on-topic) had the *highest* FAISS similarity but dropped to 3rd after reranking. This is a real, unedited before/after pair, not a constructed example — see `docs/milestones/08-reranking.md` for the full trace and more detail on why bi-encoders and cross-encoders disagree here.
 
 ### Authentication
 

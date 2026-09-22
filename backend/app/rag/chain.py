@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 
 from app.rag.llm_provider import generate
 from app.rag.router import route_query
+from app.rerank.reranker import rerank
 from app.retrieval.faiss_store import query_index
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,11 @@ def _route_and_retrieve(inputs: dict) -> dict:
     side dominating a single top-k search when the two topics' embeddings
     aren't equally close to the combined question.
     """
-    k = inputs.get("k") or int(os.getenv("RETRIEVAL_TOP_K", "5"))
+    # Fetch MORE candidates per sub-question than we'll actually use for
+    # generation (RETRIEVAL_CANDIDATE_K > RERANK_TOP_K) — FAISS casts a
+    # cheap, wide net here; the cross-encoder in the next stage narrows it
+    # down using a more precise (but slower) relevance judgment.
+    candidate_k = inputs.get("k") or int(os.getenv("RETRIEVAL_CANDIDATE_K", "10"))
     routed = route_query(inputs["question"])
 
     seen_chunk_ids: set[str] = set()
@@ -58,7 +63,7 @@ def _route_and_retrieve(inputs: dict) -> dict:
     retrieval_trace: list[dict] = []
 
     for sub_question in routed.sub_questions:
-        results = query_index(sub_question, k)
+        results = query_index(sub_question, candidate_k)
         retrieval_trace.append(
             {"sub_question": sub_question, "chunk_ids": [r["chunk_id"] for r in results]}
         )
@@ -81,13 +86,27 @@ def _route_and_retrieve(inputs: dict) -> dict:
     }
 
 
+def _rerank_step(inputs: dict) -> list[dict]:
+    """Re-score the merged FAISS candidates against the ORIGINAL question
+    (not the sub-questions used for retrieval) with a cross-encoder, and
+    keep only the best few for generation.
+
+    Using the original question here, not a sub-question, matters: the
+    sub-questions were retrieval PROBES to gather candidate evidence broadly;
+    the reranker's job is judging what's actually most relevant to what the
+    user really asked, as a whole.
+    """
+    top_k = int(os.getenv("RERANK_TOP_K", "5"))
+    return rerank(inputs["question"], inputs["retrieval"]["chunks"], top_k)
+
+
 def _generate_answer(inputs: dict) -> str:
     prompt_value = PROMPT.invoke({"context": inputs["context"], "question": inputs["question"]})
     return generate(prompt_value.to_messages())
 
 
 def build_chain():
-    """The actual LCEL chain: question -> route+retrieve -> augment -> generate.
+    """The actual LCEL chain: question -> route+retrieve -> rerank -> augment -> generate.
 
     Each stage is an explicit, composed step (via RunnablePassthrough.assign
     and the `|` operator), not a sequence of plain function calls that
@@ -98,7 +117,8 @@ def build_chain():
     """
     return (
         RunnablePassthrough.assign(retrieval=RunnableLambda(_route_and_retrieve))
-        | RunnablePassthrough.assign(context=lambda x: format_context(x["retrieval"]["chunks"]))
+        | RunnablePassthrough.assign(reranked_chunks=RunnableLambda(_rerank_step))
+        | RunnablePassthrough.assign(context=lambda x: format_context(x["reranked_chunks"]))
         | RunnablePassthrough.assign(answer=RunnableLambda(_generate_answer))
     )
 
@@ -107,6 +127,7 @@ def answer_question(question: str, k: int | None = None) -> dict:
     chain = build_chain()
     result = chain.invoke({"question": question, "k": k})
     retrieval = result["retrieval"]
+    reranked_chunks = result["reranked_chunks"]
 
     return {
         "question": question,
@@ -114,14 +135,17 @@ def answer_question(question: str, k: int | None = None) -> dict:
         "query_type": retrieval["query_type"],
         "sub_questions": retrieval["sub_questions"],
         "retrieval_trace": retrieval["retrieval_trace"],
+        "pre_rerank_order": [c["chunk_id"] for c in retrieval["chunks"]],
+        "post_rerank_order": [c["chunk_id"] for c in reranked_chunks],
         "sources": [
             {
                 "chunk_id": c["chunk_id"],
                 "source": c["source"],
                 "page": c["page"],
-                "score": c["score"],
+                "faiss_score": c["score"],
+                "rerank_score": c["rerank_score"],
                 "snippet": c["text"][:200],
             }
-            for c in retrieval["chunks"]
+            for c in reranked_chunks
         ],
     }
