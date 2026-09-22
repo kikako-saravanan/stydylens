@@ -4,7 +4,7 @@
 
 Students upload course PDFs/slides and ask questions about the material. Answers are grounded in the uploaded documents, with page-level citations, and the assistant explicitly says so when an answer isn't in the material — rather than guessing from general knowledge.
 
-**Status:** all 12 build milestones complete and verified with real output (see [Current status](#current-status)). Deployment (Milestone 14) and final acceptance (Milestone 15) in progress.
+**Status:** all build milestones complete and verified with real output (see [Current status](#current-status)). **Submission format: Option B — GitHub repo only** (see [Deployment](#deployment)), per the submission guidelines' own recommendation for a stack this heavy on local ML dependencies.
 
 **Detailed, self-study notes for every milestone** (problem → first principles → implementation → real verified output → known limitations → self-check Q&A) live in [`docs/milestones/`](docs/milestones/) — start at [`01-repo-health.md`](docs/milestones/01-repo-health.md). This README is the top-level reference; the milestone docs are where the depth lives.
 
@@ -23,6 +23,7 @@ Students upload course PDFs/slides and ask questions about the material. Answers
 - [Source attribution](#source-attribution)
 - [Authentication](#authentication)
 - [Testing](#testing)
+- [Deployment](#deployment)
 - [Known limitations](#known-limitations)
 - [Example questions](#example-questions)
 - [Sample document](#sample-document)
@@ -42,7 +43,7 @@ Students upload course PDFs/slides and ask questions about the material. Answers
 - [x] Milestone 11: Frontend
 - [x] Milestone 12: Tests
 - [x] Milestone 13: Full documentation (this file)
-- [ ] Milestone 14: Deployment
+- [x] Milestone 14: Deployment
 - [ ] Milestone 15: Final acceptance
 
 ## Architecture
@@ -297,6 +298,23 @@ RUN_LIVE_LLM_TESTS=1 python -m pytest tests/   # also runs real, billed LLM call
 ```
 
 29 tests: health, auth, ingestion, chunking, embeddings, retrieval, reranking, routing/decomposition, citation, grounded generation, and unknown-answer refusal. Real output: `27 passed, 2 skipped in 68s` (default), `5 passed in 61s` with live LLM tests enabled. Retrieval and reranking are **never mocked** — real PDF, real embedding model, real FAISS, real cross-encoder — since those are exactly the components the assignment's grading criteria wants proven real. The LLM boundary is mocked only in the 3 tests specifically checking *our* merge/citation/fallback logic, not the LLM's own reasoning quality (that's covered separately by the two live-gated tests and by RAGAS). Full rationale in [docs/milestones/12-testing.md](docs/milestones/12-testing.md).
+
+## Deployment
+
+**Submission format: Option B (GitHub repo only)** — per the submission guidelines' own stated recommendation for "projects with heavier local infra... that don't deploy cleanly to a free host." This project's stack (PyTorch + `sentence-transformers` + FAISS + a cross-encoder reranker, ~1-2GB installed, plus a locally-persisted FAISS index on disk) is exactly that profile: most free serverless/hosted tiers either can't fit the memory footprint or have ephemeral disk that would silently wipe the uploaded-document index on every restart — a deployed "demo" that quietly loses its data between sessions would be a worse, more misleading submission than an honestly-scoped, fully-reproducible local one.
+
+**Real reproducibility test performed, not assumed:** cloned the actual pushed GitHub repo fresh into an isolated directory and followed this README's own setup instructions verbatim (including applying the documented corporate-proxy `pip --cert` workaround) — the same steps a stranger with only the repo link would follow:
+
+| Step | Real measured time |
+|---|---|
+| `git clone` | a few seconds |
+| Backend: fresh venv + `pip install -r requirements.txt` (full ML stack from scratch) | 4m 23s |
+| Backend: `.env` config + server startup (including local model loading) | ~1m 30s |
+| Backend: real upload + real `/api/ask` call against the freshly-installed server | verified working — real grounded answer returned |
+| Frontend: `npm install` | 9s |
+| Frontend: `npm run build` | clean, no errors |
+
+Total hands-on-keyboard time for someone who already has their own `ANTHROPIC_API_KEY`: comfortably under 15 minutes — the submission guidelines' explicit bar for Option B. (Obtaining the API key itself isn't counted, the same way it wouldn't be for any project requiring external credentials — that's a one-time account-signup step outside the repo's control, documented in [Environment variables](#environment-variables).) Full account, including the exact commands run and real output, in [docs/milestones/14-deployment.md](docs/milestones/14-deployment.md).
 
 ## Known limitations
 
