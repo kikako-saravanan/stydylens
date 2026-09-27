@@ -16,9 +16,11 @@ from app.chunking.chunker import chunk_pages
 from app.embeddings.embedder import get_model
 from app.ingestion.pdf_loader import extract_pages
 from app.rag.chain import answer_question, make_snippet, stream_answer_question
+from app.rag.explain import explain_first_principles
 from app.rag.llm_provider import AllProvidersUnavailableError
 from app.rerank.reranker import get_reranker
-from app.retrieval.faiss_store import add_chunks, query_index
+from app.documents import history
+from app.retrieval.faiss_store import add_chunks, has_source, query_index
 
 load_dotenv()
 
@@ -90,6 +92,14 @@ async def upload_pdf(file: UploadFile = File(...), _user: str = Depends(require_
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
+    # The same filename is treated as the same document: re-indexing it
+    # would silently duplicate every chunk and skew retrieval.
+    if has_source(file.filename):
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{file.filename}' has already been uploaded. Select it from your documents instead.",
+        )
+
     dest = UPLOAD_DIR / file.filename
     with dest.open("wb") as out:
         shutil.copyfileobj(file.file, out)
@@ -111,6 +121,7 @@ async def upload_pdf(file: UploadFile = File(...), _user: str = Depends(require_
     logger.info("[chunking] %s: %d chunks from %d pages", file.filename, len(chunks), len(pages))
 
     total_indexed = add_chunks(chunks)
+    history.record_upload(file.filename)
     logger.info(
         "[index] %s: %d chunks embedded and added to FAISS "
         "(index now holds %d chunks total across all uploads)",
@@ -158,11 +169,22 @@ async def query(request: QueryRequest, _user: str = Depends(require_auth)):
 class AskRequest(BaseModel):
     question: str
     k: int | None = None
+    # Restrict retrieval to one uploaded document (its filename).
+    source: str | None = None
+
+
+@app.get("/api/documents")
+async def list_documents(_user: str = Depends(require_auth)):
+    """Every uploaded PDF with its question history, so users can reuse a
+    document instead of uploading it again."""
+    return {"documents": history.list_documents(UPLOAD_DIR)}
 
 
 @app.post("/api/ask")
 async def ask(request: AskRequest, _user: str = Depends(require_auth)):
-    result = answer_question(request.question, request.k)
+    result = answer_question(request.question, request.k, request.source)
+    if request.source:
+        history.record_question(request.source, request.question, result["query_type"])
     logger.info(
         "[ask] %r -> grounded in %d source chunk(s)",
         request.question, len(result["sources"]),
@@ -181,7 +203,11 @@ async def ask_stream(request: AskRequest, _user: str = Depends(require_auth)):
 
     def event_stream():
         try:
-            for event in stream_answer_question(request.question, request.k):
+            for event in stream_answer_question(request.question, request.k, request.source):
+                if event["stage"] == "complete" and request.source:
+                    history.record_question(
+                        request.source, request.question, event.get("query_type")
+                    )
                 yield f"data: {json.dumps(event)}\n\n"
         except AllProvidersUnavailableError as e:
             # The HTTP response already started streaming with a 200 status
@@ -194,3 +220,17 @@ async def ask_stream(request: AskRequest, _user: str = Depends(require_auth)):
             yield f"data: {json.dumps({'stage': 'error', 'message': 'Internal server error.'})}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+class ExplainRequest(BaseModel):
+    question: str
+    answer: str
+    excerpts: list[str] = []
+
+
+@app.post("/api/explain")
+async def explain(request: ExplainRequest, _user: str = Depends(require_auth)):
+    """Re-explain an already-returned answer from first principles."""
+    explanation = explain_first_principles(request.question, request.answer, request.excerpts)
+    logger.info("[explain] %r -> %d chars", request.question, len(explanation))
+    return {"explanation": explanation}

@@ -1,0 +1,17 @@
+# Runtime dependencies only, for the deployed container.
+# Excludes: pytest, httpx (tests only), ragas + its langchain-community pin
+# (used only by scripts/run_ragas_eval.py, never imported by the app itself)
+# -- keeps the production image smaller and the build faster.
+# Keep in sync with requirements.txt for shared packages.
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+python-multipart
+pdfplumber
+pypdf
+sentence-transformers
+faiss-cpu
+langchain-core
+langchain-anthropic
+langchain-google-genai

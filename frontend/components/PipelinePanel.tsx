@@ -39,17 +39,17 @@ function eventFor(events: PipelineEvent[], stage: PipelineStage, status: "start"
 }
 
 const DOT: Record<StageState, string> = {
-  pending: "bg-gray-200",
-  running: "bg-amber-400 animate-pulse",
-  done: "bg-green-500",
+  pending: "bg-line-strong",
+  running: "bg-warn animate-pulse",
+  done: "bg-ok",
 };
 
 export function PipelinePanel({ events }: { events: PipelineEvent[] }) {
   const errorEvent = events.find((e) => e.stage === "error");
 
   return (
-    <div className="mt-4 space-y-3 rounded-lg border border-black/10 bg-gray-50 p-4">
-      <p className="text-xs font-medium text-gray-500">Pipeline (live)</p>
+    <div className="mt-4 space-y-3 rounded-xl border border-line bg-surface-2 p-4">
+      <p className="text-sm font-semibold text-fg">Pipeline (live)</p>
 
       {STAGES.map(({ key, title, blurb }) => {
         const state = stateFor(events, key);
@@ -59,16 +59,16 @@ export function PipelinePanel({ events }: { events: PipelineEvent[] }) {
           <div key={key} className="flex gap-3">
             <span className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${DOT[state]}`} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-800">{title}</p>
-              <p className="text-xs text-gray-500">{blurb}</p>
+              <p className="text-sm font-semibold text-fg">{title}</p>
+              <p className="text-sm text-muted">{blurb}</p>
 
               {state === "done" && key === "routing" && doneEvent && (
-                <div className="mt-1.5 text-xs text-gray-700">
-                  <span className="rounded-full bg-gray-200 px-2 py-0.5 font-medium">
+                <div className="mt-1.5 text-sm text-fg">
+                  <span className="rounded-full bg-accent-soft px-2.5 py-0.5 font-medium text-accent-soft-fg">
                     {doneEvent.query_type}
                   </span>
                   {(doneEvent.sub_questions?.length ?? 0) > 1 && (
-                    <ul className="mt-1 list-inside list-disc text-gray-500">
+                    <ul className="mt-1 list-inside list-disc text-muted">
                       {doneEvent.sub_questions!.map((sq) => (
                         <li key={sq}>{sq}</li>
                       ))}
@@ -78,14 +78,14 @@ export function PipelinePanel({ events }: { events: PipelineEvent[] }) {
               )}
 
               {state === "done" && key === "retrieval" && doneEvent && (
-                <p className="mt-1.5 text-xs text-gray-700">
+                <p className="mt-1.5 text-sm text-fg">
                   {doneEvent.candidate_count} unique candidate chunk(s) retrieved across{" "}
                   {doneEvent.retrieval_trace?.length ?? 1} sub-question(s)
                 </p>
               )}
 
               {state === "done" && key === "reranking" && doneEvent && (
-                <p className="mt-1.5 text-xs text-gray-700">
+                <p className="mt-1.5 text-sm text-fg">
                   Top result{" "}
                   {doneEvent.pre_rerank_order?.[0] === doneEvent.post_rerank_order?.[0]
                     ? "unchanged after reranking"
@@ -96,7 +96,7 @@ export function PipelinePanel({ events }: { events: PipelineEvent[] }) {
               )}
 
               {state === "done" && key === "generation" && (
-                <p className="mt-1.5 text-xs text-gray-700">Answer generated — see below.</p>
+                <p className="mt-1.5 text-sm text-fg">Answer generated — see below.</p>
               )}
             </div>
           </div>
@@ -104,7 +104,7 @@ export function PipelinePanel({ events }: { events: PipelineEvent[] }) {
       })}
 
       {errorEvent && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <div className="rounded-lg border border-err-line bg-err-bg p-2 text-sm text-err-fg">
           {errorEvent.message}
         </div>
       )}

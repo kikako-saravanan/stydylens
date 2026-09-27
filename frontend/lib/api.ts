@@ -103,13 +103,36 @@ export interface AskResult {
   sources: Source[];
 }
 
-export async function askQuestion(question: string, creds: Credentials): Promise<AskResult> {
+export interface DocumentQuestion {
+  question: string;
+  query_type: AskResult["query_type"] | null;
+  asked_at: string;
+}
+
+export interface DocumentInfo {
+  source: string;
+  page_count: number;
+  chunk_count: number;
+  uploaded_at: string | null;
+  questions: DocumentQuestion[];
+}
+
+export async function listDocuments(creds: Credentials): Promise<DocumentInfo[]> {
+  const res = await request<{ documents: DocumentInfo[] }>("/api/documents", { method: "GET" }, creds);
+  return res.documents;
+}
+
+export async function askQuestion(
+  question: string,
+  creds: Credentials,
+  source: string | null
+): Promise<AskResult> {
   return request(
     "/api/ask",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, source }),
     },
     creds
   );
@@ -146,14 +169,15 @@ export interface PipelineEvent {
  */
 export async function* streamAsk(
   question: string,
-  creds: Credentials
+  creds: Credentials,
+  source: string | null
 ): AsyncGenerator<PipelineEvent> {
   let response: Response;
   try {
     response = await fetch(`${API_URL}/api/ask/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: authHeader(creds) },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, source }),
     });
   } catch {
     throw new ApiError(0, "Could not reach the StudyLens server. Is the backend running?");
@@ -182,4 +206,23 @@ export async function* streamAsk(
       }
     }
   }
+}
+
+export async function explainFirstPrinciples(
+  result: AskResult,
+  creds: Credentials
+): Promise<{ explanation: string }> {
+  return request(
+    "/api/explain",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: result.question,
+        answer: result.answer,
+        excerpts: result.sources.map((s) => s.snippet),
+      }),
+    },
+    creds
+  );
 }

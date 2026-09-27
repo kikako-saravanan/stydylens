@@ -209,8 +209,10 @@ All endpoints except `/health` require HTTP Basic Auth (`AUTH_USERNAME`/`AUTH_PA
 | `GET /api/me` | required | — | `{"username": str}` | Cheap credential check for the frontend login screen — no LLM/embedding cost |
 | `POST /api/upload` | required | multipart `file` (PDF) | `{filename, page_count, pages[], chunk_count, chunks[], index_total_chunks}` | Full ingest→chunk→embed→index pipeline |
 | `POST /api/query` | required | `{"question": str, "k": int}` | `{question, results: [{chunk_id, source, page, score, snippet}]}` | Raw FAISS retrieval, no LLM, no reranking |
-| `POST /api/ask` | required | `{"question": str, "k": int\|null}` | see below | Full pipeline: route → retrieve → rerank → generate |
+| `POST /api/ask` | required | `{"question": str, "k": int\|null, "source": str\|null}` | see below | Full pipeline: route → retrieve → rerank → generate |
 | `POST /api/ask/stream` | required | same as `/api/ask` | Server-Sent Events, one event per stage | Same pipeline, streamed live — see [Pipeline visualization](#pipeline-visualization) |
+| `GET /api/documents` | required | — | `{documents: [{source, page_count, chunk_count, uploaded_at, questions[]}]}` | Uploaded PDFs with per-document question history, so users can reuse a PDF instead of re-uploading |
+| `POST /api/explain` | required | `{question, answer, excerpts[]}` | `{explanation}` | Re-explains an answer from first principles |
 
 `POST /api/ask` response shape:
 ```json

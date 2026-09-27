@@ -63,7 +63,7 @@ def _classify_and_decompose(question: str):
     return route_query(question)
 
 
-def _retrieve_for_subquestions(routed, candidate_k: int) -> dict:
+def _retrieve_for_subquestions(routed, candidate_k: int, source: str | None = None) -> dict:
     """Stage 2 alone: retrieve per sub-question and merge, given an
     already-computed routing decision. See `_route_and_retrieve` for why
     single_fact/multi_part/summarization all flow through the same loop.
@@ -73,7 +73,7 @@ def _retrieve_for_subquestions(routed, candidate_k: int) -> dict:
     retrieval_trace: list[dict] = []
 
     for sub_question in routed.sub_questions:
-        results = query_index(sub_question, candidate_k)
+        results = query_index(sub_question, candidate_k, source)
         retrieval_trace.append(
             {"sub_question": sub_question, "chunk_ids": [r["chunk_id"] for r in results]}
         )
@@ -108,7 +108,7 @@ def _route_and_retrieve(inputs: dict) -> dict:
     # down using a more precise (but slower) relevance judgment.
     candidate_k = inputs.get("k") or int(os.getenv("RETRIEVAL_CANDIDATE_K", "10"))
     routed = _classify_and_decompose(inputs["question"])
-    retrieval = _retrieve_for_subquestions(routed, candidate_k)
+    retrieval = _retrieve_for_subquestions(routed, candidate_k, inputs.get("source"))
 
     logger.info(
         "[routing] %r -> type=%s, %d sub-question(s), %d unique chunk(s) after merge",
@@ -174,9 +174,9 @@ def _build_sources(reranked_chunks: list[dict]) -> list[dict]:
     ]
 
 
-def answer_question(question: str, k: int | None = None) -> dict:
+def answer_question(question: str, k: int | None = None, source: str | None = None) -> dict:
     chain = build_chain()
-    result = chain.invoke({"question": question, "k": k})
+    result = chain.invoke({"question": question, "k": k, "source": source})
     retrieval = result["retrieval"]
     reranked_chunks = result["reranked_chunks"]
 
@@ -192,7 +192,7 @@ def answer_question(question: str, k: int | None = None) -> dict:
     }
 
 
-def stream_answer_question(question: str, k: int | None = None):
+def stream_answer_question(question: str, k: int | None = None, source: str | None = None):
     """Same pipeline as answer_question(), reusing the exact same stage
     functions (_classify_and_decompose, _retrieve_for_subquestions, rerank,
     _generate_answer) — but as a generator that yields a {"stage", "status",
@@ -220,7 +220,7 @@ def stream_answer_question(question: str, k: int | None = None):
     }
 
     yield {"stage": "retrieval", "status": "start"}
-    retrieval = _retrieve_for_subquestions(routed, candidate_k)
+    retrieval = _retrieve_for_subquestions(routed, candidate_k, source)
     yield {
         "stage": "retrieval",
         "status": "done",

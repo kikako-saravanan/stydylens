@@ -2,8 +2,10 @@
 
 import { FormEvent, useState } from "react";
 import { checkLogin, saveCredentials } from "@/lib/api";
+import { ThemeToggle } from "./ThemeToggle";
 
-const CONTACT_EMAIL = "[REDACTED_EMAIL_ADDRESS_1]";
+// Set NEXT_PUBLIC_CONTACT_EMAIL in frontend/.env.local to show a contact address.
+const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL;
 
 export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState("");
@@ -27,13 +29,16 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   }
 
   return (
-    <div className="mx-auto mt-16 w-full max-w-sm rounded-xl border border-black/10 p-8 shadow-sm">
-      <h1 className="text-xl font-semibold">StudyLens</h1>
-      <p className="mt-1 text-sm text-gray-500">Lecture Notes Q&amp;A Assistant</p>
+    <div className="mx-auto mt-16 w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-card">
+      <div className="flex items-start justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">StudyLens</h1>
+        <ThemeToggle />
+      </div>
+      <p className="mt-1 text-sm text-muted">Lecture Notes Q&amp;A Assistant</p>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
-          <label htmlFor="username" className="mb-1 block text-sm font-medium">
+          <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-fg">
             Username
           </label>
           <input
@@ -42,11 +47,11 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setUsername(e.target.value)}
             required
             autoFocus
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm outline-none focus:border-black/40"
+            className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-base text-fg placeholder:text-subtle outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           />
         </div>
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-medium">
+          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-fg">
             Password
           </label>
           <input
@@ -55,27 +60,34 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full rounded-md border border-black/15 px-3 py-2 text-sm outline-none focus:border-black/40"
+            className="w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-base text-fg placeholder:text-subtle outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="w-full rounded-lg bg-accent px-3 py-2.5 text-sm font-semibold text-accent-fg transition hover:bg-accent-hover disabled:opacity-50"
         >
           {loading ? "Checking…" : "Sign in"}
         </button>
       </form>
 
       {error && (
-        <div className="mt-5 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="mt-5 rounded-lg border border-err-line bg-err-bg p-3 text-sm text-err-fg">
           <p className="font-medium">Access restricted</p>
           <p className="mt-1">
-            This app is access-restricted to control LLM API usage costs. Email{" "}
-            <a href={`mailto:${CONTACT_EMAIL}`} className="underline">
-              {CONTACT_EMAIL}
-            </a>{" "}
-            to request credentials.
+            This app is access-restricted to control LLM API usage costs.{" "}
+            {CONTACT_EMAIL ? (
+              <>
+                Email{" "}
+                <a href={`mailto:${CONTACT_EMAIL}`} className="underline">
+                  {CONTACT_EMAIL}
+                </a>{" "}
+                to request credentials.
+              </>
+            ) : (
+              "Ask the administrator to request credentials."
+            )}
           </p>
         </div>
       )}

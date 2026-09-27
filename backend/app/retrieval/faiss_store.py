@@ -81,23 +81,53 @@ def count() -> int:
         return _index.ntotal
 
 
-def query_index(question: str, k: int = 5) -> list[dict]:
+def list_sources() -> list[dict]:
+    """Every distinct source document in the index, with its chunk and page
+    counts. The index metadata is the single source of truth for "what has
+    been uploaded", so this can never disagree with what is searchable."""
+    with _lock:
+        _ensure_loaded()
+        docs: dict[str, dict] = {}
+        for meta in _metadata:
+            doc = docs.setdefault(meta["source"], {"chunks": 0, "pages": set()})
+            doc["chunks"] += 1
+            doc["pages"].add(meta["page"])
+        return [
+            {"source": name, "chunk_count": d["chunks"], "page_count": len(d["pages"])}
+            for name, d in docs.items()
+        ]
+
+
+def has_source(source: str) -> bool:
+    return any(d["source"] == source for d in list_sources())
+
+
+def query_index(question: str, k: int = 5, source: str | None = None) -> list[dict]:
     """Embed the question and return the top-k most similar chunks.
 
     Scores are cosine similarity (both sides are unit-length vectors, so
     FAISS's inner product IS the cosine similarity here — no separate
     normalization step needed at query time).
+
+    With `source`, only chunks from that document are returned. The flat
+    index is searched exhaustively anyway, so this ranks every vector and
+    filters afterward — exact, and no different in cost from an unfiltered
+    search at this scale.
     """
     with _lock:
         _ensure_loaded()
         if _index.ntotal == 0:
             return []
         query_vector = embed_texts([question]).astype(np.float32)
-        k = min(k, _index.ntotal)
-        scores, indices = _index.search(query_vector, k)
+        search_k = _index.ntotal if source else min(k, _index.ntotal)
+        scores, indices = _index.search(query_vector, search_k)
 
         results = []
         for score, idx in zip(scores[0], indices[0]):
             meta = _metadata[idx]
+            if source and meta["source"] != source:
+                continue
             results.append({**meta, "score": float(score)})
+            if len(results) == k:
+                break
         return results
